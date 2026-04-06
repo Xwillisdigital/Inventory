@@ -66,49 +66,80 @@
     lookupProduct(text);
   });
 
-  function lookupProduct(barcode) {
+    function lookupProduct(barcode) {
     var nameField = document.getElementById("name");
     nameField.value = "查询中...";
 
     var localDB = {
       // 填入你自己的货物，例如：
-      // "6901028001107": "矿泉水500ml",
+      // "9787111111111": "某本书",
       // "12345678": "螺丝M3x10"
     };
-
     if (localDB[barcode]) {
       nameField.value = localDB[barcode];
       return;
     }
 
-    fetch("https://world.openfoodfacts.org/api/v0/product/" + barcode + ".json")
+    // 先查图书数据库（Open Library）
+    fetch("https://openlibrary.org/api/books?bibkeys=ISBN:"
+          + barcode + "&format=json&jscmd=data")
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        if (d.status === 1 && d.product) {
-          var p = d.product;
-          var n = p.product_name_zh || p.product_name_en || p.product_name || "";
-          var b = p.brands || "";
-          nameField.value = (b ? b + " " : "") + n || "未找到，请手动输入";
+        var key = "ISBN:" + barcode;
+        if (d[key] && d[key].title) {
+          var authors = "";
+          if (d[key].authors && d[key].authors.length) {
+            authors = " / " + d[key].authors[0].name;
+          }
+          nameField.value = d[key].title + authors;
         } else {
-          nameField.value = "未找到，请手动输入";
+          // 图书查不到，再查食品数据库
+          return fetch("https://world.openfoodfacts.org/api/v0/product/"
+                       + barcode + ".json")
+            .then(function(r) { return r.json(); })
+            .then(function(d2) {
+              if (d2.status === 1 && d2.product) {
+                var p = d2.product;
+                var n = p.product_name_zh || p.product_name_en
+                        || p.product_name || "";
+                var b = p.brands || "";
+                nameField.value = (b ? b + " " : "") + n
+                                  || "未找到，请手动输入";
+              } else {
+                nameField.value = "未找到，请手动输入";
+              }
+            });
         }
       })
       .catch(function() {
-        nameField.value = "未找到，请手动输入";
+        nameField.value = "查询失败，请手动输入";
       });
   }
 
-  function submitData() {
+    function submitData() {
     var msg = document.getElementById("msg");
     msg.style.display = "none";
 
-    var form = new FormData();
-    form.append("barcode",  document.getElementById("barcode").value);
-    form.append("name",     document.getElementById("name").value);
-    form.append("quantity", document.getElementById("qty").value);
-    form.append("remark",   document.getElementById("remark").value);
+    var barcode  = document.getElementById("barcode").value;
+    var name     = document.getElementById("name").value;
+    var quantity = document.getElementById("qty").value;
+    var remark   = document.getElementById("remark").value;
 
-    fetch(API_URL, { method: "POST", body: form, mode: "no-cors" })
+    if (!barcode && !name) {
+      msg.className = "err";
+      msg.textContent = "请先扫描条码或填写货物名称";
+      msg.style.display = "block";
+      return;
+    }
+
+    // 改用 GET 请求，彻底避免 CORS 跳转问题
+    var url = API_URL
+      + "?barcode="  + encodeURIComponent(barcode)
+      + "&name="     + encodeURIComponent(name)
+      + "&quantity=" + encodeURIComponent(quantity)
+      + "&remark="   + encodeURIComponent(remark);
+
+    fetch(url, { mode: "no-cors" })
       .then(function() {
         msg.className = "ok";
         msg.textContent = "入库成功！数据已写入 Google Sheets";
