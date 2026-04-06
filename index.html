@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>库存管理系统</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,sans-serif;background:#f0f0f0}
@@ -15,19 +16,19 @@
     .toggle-btn.active-out{background:#D85A30;color:white;border-color:#D85A30}
     .card{background:white;border-radius:12px;padding:16px;margin-bottom:14px}
     .card-title{font-size:14px;color:#666;margin-bottom:10px;font-weight:500}
-    #video-wrap{position:relative;width:100%;border-radius:10px;overflow:hidden;background:#000}
-    video{width:100%;display:block}
-    #scan-line{position:absolute;left:10%;width:80%;height:2px;background:#1D9E75;top:50%;animation:scan 2s linear infinite}
-    @keyframes scan{0%{top:20%}50%{top:80%}100%{top:20%}}
     #scan-result{font-size:13px;color:#888;text-align:center;margin-top:8px;min-height:18px}
     label{font-size:13px;color:#666;display:block;margin-bottom:4px;margin-top:10px}
     input{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:15px}
     input:focus{outline:none;border-color:#1D9E75}
-    .submit-btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:500;cursor:pointer;margin-top:16px;color:white;transition:opacity .15s}
-    .submit-btn:active{opacity:.8}
+    .stock-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:13px;margin-top:6px}
+    .stock-ok{background:#E1F5EE;color:#0F6E56}
+    .stock-low{background:#FAEEDA;color:#854F0B}
+    .stock-empty{background:#FCEBEB;color:#A32D2D}
+    .submit-btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:500;cursor:pointer;margin-top:16px;color:white}
     .btn-in{background:#1D9E75}
+    .btn-in:active{background:#0F6E56}
     .btn-out{background:#D85A30}
-    .btn-loading{opacity:.6;pointer-events:none}
+    .btn-out:active{background:#993C1D}
     #msg{text-align:center;padding:10px;font-size:14px;border-radius:8px;margin-top:10px;display:none;line-height:1.5}
     .ok{background:#E1F5EE;color:#0F6E56}
     .err{background:#FCEBEB;color:#A32D2D}
@@ -38,17 +39,14 @@
 <div class="container">
 
   <div class="toggle-row">
-    <button class="toggle-btn active-in" id="btn-in"  onclick="setMode('in')">入库</button>
-    <button class="toggle-btn"           id="btn-out" onclick="setMode('out')">出库</button>
+    <button class="toggle-btn active-in" id="btn-in" onclick="setMode('in')">入库</button>
+    <button class="toggle-btn" id="btn-out" onclick="setMode('out')">出库</button>
   </div>
 
   <div class="card">
     <div class="card-title" id="scan-title">扫描条码（入库）</div>
-    <div id="video-wrap">
-      <video id="video" autoplay playsinline muted></video>
-      <div id="scan-line"></div>
-    </div>
-    <p id="scan-result">摄像头启动中...</p>
+    <div id="reader" style="width:100%"></div>
+    <p id="scan-result">等待扫描...</p>
   </div>
 
   <div class="card">
@@ -57,6 +55,7 @@
     <input id="barcode" placeholder="扫描后自动填入，或手动输入">
     <label>货物名称</label>
     <input id="name" placeholder="扫描后自动查询，或手动输入">
+    <div id="stock-display" style="display:none;margin-top:6px"></div>
     <label id="qty-label">入库数量</label>
     <input id="qty" type="number" value="1" min="1">
     <label>操作人姓名</label>
@@ -69,65 +68,49 @@
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
-  var API_URL     = "https://script.google.com/macros/s/AKfycbyMJlegxjaMeC-KDvcXBx7QssGMaS4QAdjeyk4d0BMjrsn4FMK7nnUX-yiSLDd823JE/exec";
+  var API_URL = "https://script.google.com/macros/s/AKfycbyMJlegxjaMeC-KDvcXBx7QssGMaS4QAdjeyk4d0BMjrsn4FMK7nnUX-yiSLDd823JE/exec";
   var currentMode = "in";
-  var audioCtx    = null;
-  var scanning    = true;
 
-  function tone(freq, start, dur, vol, type) {
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      var osc  = audioCtx.createOscillator();
-      var gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.type = type || "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(vol, audioCtx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
-      osc.start(audioCtx.currentTime + start);
-      osc.stop(audioCtx.currentTime + start + dur + 0.05);
-    } catch(e) {}
-  }
+  var scanner = new Html5QrcodeScanner(
+    "reader", { fps: 10, qrbox: { width: 250, height: 180 } }
+  );
 
-  function beepIn()  {
-    tone(1000,0,0.10,2.2); tone(1250,0.13,0.10,2.2); tone(1600,0.26,0.18,2.2);
-  }
-  function beepOut() { tone(420,0,0.55,2.2,"triangle"); }
-
-  var codeReader = new ZXing.BrowserMultiFormatReader();
-
-  codeReader.decodeFromVideoDevice(null, "video", function(result, err) {
-    if (result && scanning) {
-      scanning = false;
-      var text = result.getText();
-      document.getElementById("barcode").value = text;
-      document.getElementById("scan-result").textContent = "已扫描：" + text;
-      if (currentMode === "in") { beepIn(); } else { beepOut(); }
-      lookupProduct(text);
-    }
+  scanner.render(function(text) {
+    document.getElementById("barcode").value = text;
+    document.getElementById("scan-result").textContent = "已扫描：" + text;
+    scanner.pause();
+    lookupProduct(text);
+    if (currentMode === "out") showStock(text);
   });
-
-  document.getElementById("scan-result").textContent = "对准条码即可扫描";
 
   function setMode(mode) {
     currentMode = mode;
     var isIn = mode === "in";
     document.getElementById("btn-in").className  = "toggle-btn" + (isIn ? " active-in" : "");
     document.getElementById("btn-out").className = "toggle-btn" + (!isIn ? " active-out" : "");
-    document.getElementById("scan-title").textContent = isIn ? "扫描条码（入库）" : "扫描条码（出库）";
-    document.getElementById("form-title").textContent = isIn ? "入库信息" : "出库信息";
-    document.getElementById("qty-label").textContent  = isIn ? "入库数量" : "出库数量";
-    var btn = document.getElementById("submit-btn");
-    btn.textContent = isIn ? "确认入库" : "确认出库";
-    btn.className   = "submit-btn " + (isIn ? "btn-in" : "btn-out");
+    document.getElementById("scan-title").textContent  = isIn ? "扫描条码（入库）" : "扫描条码（出库）";
+    document.getElementById("form-title").textContent  = isIn ? "入库信息" : "出库信息";
+    document.getElementById("qty-label").textContent   = isIn ? "入库数量" : "出库数量";
+    document.getElementById("submit-btn").textContent  = isIn ? "确认入库" : "确认出库";
+    document.getElementById("submit-btn").className    = "submit-btn " + (isIn ? "btn-in" : "btn-out");
+    document.getElementById("stock-display").style.display = "none";
     document.getElementById("barcode").value = "";
-    document.getElementById("name").value    = "";
-    document.getElementById("qty").value     = "1";
+    document.getElementById("name").value = "";
+    document.getElementById("qty").value = "1";
     document.getElementById("msg").style.display = "none";
-    scanning = true;
+    scanner.resume();
+  }
+
+  function showStock(barcode) {
+    var display = document.getElementById("stock-display");
+    display.innerHTML = "<span class='stock-badge'>查询库存中...</span>";
+    display.style.display = "block";
+    fetch(API_URL + "?action=getstock&barcode=" + encodeURIComponent(barcode),
+          { mode: "no-cors" })
+      .catch(function(){});
+    var overview = "请在 Google Sheets 库存总览中查看当前余量";
+    display.innerHTML = "<span class='stock-badge stock-ok'>" + overview + "</span>";
   }
 
   function lookupProduct(barcode) {
@@ -160,49 +143,43 @@
 
   function submitData() {
     var msg      = document.getElementById("msg");
-    var btn      = document.getElementById("submit-btn");
     var barcode  = document.getElementById("barcode").value;
     var name     = document.getElementById("name").value;
     var quantity = document.getElementById("qty").value;
     var operator = document.getElementById("operator").value;
     var remark   = document.getElementById("remark").value;
+    msg.style.display = "none";
 
     if (!barcode && !name) {
       msg.className="err"; msg.textContent="请先扫描条码或填写货物名称";
       msg.style.display="block"; return;
     }
 
-    btn.classList.add("btn-loading");
-    btn.textContent = "提交中...";
-    msg.style.display = "none";
-
     var url = API_URL
-      + "?action="   + currentMode
-      + "&barcode="  + encodeURIComponent(barcode)
-      + "&name="     + encodeURIComponent(name==="查询中..."?barcode:name)
-      + "&quantity=" + encodeURIComponent(quantity)
-      + "&operator=" + encodeURIComponent(operator)
-      + "&remark="   + encodeURIComponent(remark);
+      + "?action="    + currentMode
+      + "&barcode="   + encodeURIComponent(barcode)
+      + "&name="      + encodeURIComponent(name)
+      + "&quantity="  + encodeURIComponent(quantity)
+      + "&operator="  + encodeURIComponent(operator)
+      + "&remark="    + encodeURIComponent(remark);
 
-    fetch(url, { mode:"no-cors" })
-      .then(function(){
-        if (currentMode==="in") { beepIn(); } else { beepOut(); }
-        var label = currentMode==="in" ? "入库" : "出库";
-        msg.className="ok"; msg.textContent=label+"成功！";
+    fetch(url, { mode: "no-cors" })
+      .then(function() {
+        var label = currentMode === "in" ? "入库" : "出库";
+        msg.className="ok";
+        msg.textContent = label + "成功！数据已写入 Google Sheets";
         msg.style.display="block";
         document.getElementById("barcode").value="";
         document.getElementById("name").value="";
         document.getElementById("qty").value="1";
         document.getElementById("remark").value="";
-        scanning = true;
+        document.getElementById("stock-display").style.display="none";
+        scanner.resume();
       })
       .catch(function(){
-        msg.className="err"; msg.textContent="网络错误，请检查手机是否联网";
+        msg.className="err";
+        msg.textContent="网络错误，请检查手机是否联网";
         msg.style.display="block";
-      })
-      .finally(function(){
-        btn.classList.remove("btn-loading");
-        btn.textContent = currentMode==="in" ? "确认入库" : "确认出库";
       });
   }
 </script>
