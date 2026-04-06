@@ -49,11 +49,44 @@
   const scanner = new Html5QrcodeScanner("reader",
     { fps: 10, qrbox: { width: 250, height: 180 } });
 
-  scanner.render(function(text) {
-    document.getElementById("barcode").value = text;
-    document.getElementById("scan-result").textContent = "已扫描：" + text;
-    scanner.pause();
-  });
+scanner.render(function(text) {
+  document.getElementById("barcode").value = text;
+  document.getElementById("scan-result").textContent = "已扫描：" + text;
+  document.getElementById("name").value = "查询中...";
+  scanner.pause();
+  lookupProduct(text);
+});
+
+function lookupProduct(barcode) {
+  var nameField = document.getElementById("name");
+
+  var localDB = {
+    // 在这里填你自己的货物，例如：
+    // "6901028001107": "矿泉水500ml",
+    // "12345678": "螺丝M3x10"
+  };
+
+  if (localDB[barcode]) {
+    nameField.value = localDB[barcode];
+    return;
+  }
+
+  fetch("https://world.openfoodfacts.org/api/v0/product/" + barcode + ".json")
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 1 && d.product) {
+        var p = d.product;
+        var found = p.product_name_zh || p.product_name_en || p.product_name || "";
+        var brand = p.brands || "";
+        nameField.value = (brand ? brand + " " : "") + found || "未找到，请手动输入";
+      } else {
+        nameField.value = "未找到，请手动输入";
+      }
+    })
+    .catch(function() {
+      nameField.value = "查询失败，请手动输入";
+    });
+}
 
   function submitData() {
   var barcode  = document.getElementById("barcode").value;
