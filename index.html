@@ -43,6 +43,8 @@
     <input id="name" placeholder="扫描后自动查询，或手动输入">
     <label>入库数量</label>
     <input id="qty" type="number" value="1" min="1">
+    <label>操作人姓名</label>
+    <input id="operator" placeholder="请输入你的姓名">
     <label>备注</label>
     <input id="remark" placeholder="可选">
     <button class="submit-btn" onclick="submitData()">确认入库</button>
@@ -133,11 +135,13 @@
     }
 
     // 改用 GET 请求，彻底避免 CORS 跳转问题
-    var url = API_URL
-      + "?barcode="  + encodeURIComponent(barcode)
-      + "&name="     + encodeURIComponent(name)
-      + "&quantity=" + encodeURIComponent(quantity)
-      + "&remark="   + encodeURIComponent(remark);
+var operator = document.getElementById("operator").value;
+var url = API_URL
+  + "?barcode="   + encodeURIComponent(barcode)
+  + "&name="      + encodeURIComponent(name)
+  + "&quantity="  + encodeURIComponent(quantity)
+  + "&remark="    + encodeURIComponent(remark)
+  + "&operator="  + encodeURIComponent(operator);
 
     fetch(url, { mode: "no-cors" })
       .then(function() {
