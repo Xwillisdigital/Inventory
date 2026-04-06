@@ -57,25 +57,28 @@
 
   var html5QrCode = new Html5Qrcode("reader");
 
-  Html5Qrcode.getCameras().then(function(cameras) {
-    if (cameras && cameras.length) {
-      var cameraId = cameras[cameras.length - 1].id;
-      html5QrCode.start(
-        cameraId,
-        { fps: 10, qrbox: { width: 240, height: 180 } },
-        function(text) {
-          document.getElementById("barcode").value = text;
-          document.getElementById("scan-result").textContent = "已扫描：" + text;
-          html5QrCode.pause();
-          lookupProduct(text);
-        }
-      );
-    } else {
-      document.getElementById("scan-result").textContent = "未检测到摄像头";
+  html5QrCode.start(
+  { facingMode: { exact: "environment" } },
+  {
+    fps: 10,
+    qrbox: { width: 240, height: 180 },
+    videoConstraints: {
+      facingMode: { exact: "environment" },
+      width:  { ideal: 1280 },
+      height: { ideal: 720 }
     }
-  }).catch(function(err) {
-    document.getElementById("scan-result").textContent = "摄像头权限被拒绝，请在浏览器设置中允许";
-  });
+  },
+  function(text) {
+    document.getElementById("barcode").value = text;
+    document.getElementById("scan-result").textContent = "已扫描：" + text;
+    html5QrCode.pause();
+    lookupProduct(text);
+  }
+).then(function() {
+  document.getElementById("scan-result").textContent = "摄像头已就绪，请对准条码";
+}).catch(function(err) {
+  document.getElementById("scan-result").textContent = "无法启动后置摄像头：" + err;
+});
 
   function lookupProduct(barcode) {
     var nameField = document.getElementById("name");
