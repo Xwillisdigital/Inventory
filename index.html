@@ -63,12 +63,11 @@
 
 </div>
 <script>
-  var API_URL = "https://script.google.com/macros/s/AKfycbyMJlegxjaMeC-KDvcXBx7QssGMaS4QAdjeyk4d0BMjrsn4FMK7nnUX-yiSLDd823JE/exec";
+  var API_URL    = "https://script.google.com/macros/s/AKfycbyMJlegxjaMeC-KDvcXBx7QssGMaS4QAdjeyk4d0BMjrsn4FMK7nnUX-yiSLDd823JE/exec";
   var currentMode = "in";
-  var audioCtx = null;
+  var audioCtx   = null;
 
-  // 滴声函数
-    function tone(freq, start, dur, vol, type) {
+  function tone(freq, start, dur, vol, type) {
     try {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       var osc  = audioCtx.createOscillator();
@@ -99,11 +98,11 @@
   );
 
   scanner.render(function(text) {
-    beepin();  // 扫描成功立即发出滴声
     document.getElementById("barcode").value = text;
     document.getElementById("scan-result").textContent = "已扫描：" + text;
     scanner.pause();
-    lookupProduct(text);  // 查询名称在后台进行，不阻塞提交
+    lookupProduct(text);
+    if (currentMode === "in") { beepIn(); } else { beepOut(); }
   });
 
   function setMode(mode) {
@@ -127,9 +126,7 @@
   function lookupProduct(barcode) {
     var nameField = document.getElementById("name");
     nameField.value = "查询中...";
-    var localDB = {
-      // "条码": "货物名称"
-    };
+    var localDB = {};
     if (localDB[barcode]) { nameField.value = localDB[barcode]; return; }
     fetch("https://openlibrary.org/api/books?bibkeys=ISBN:" + barcode + "&format=json&jscmd=data")
       .then(function(r){ return r.json(); })
@@ -143,9 +140,9 @@
             .then(function(r){ return r.json(); })
             .then(function(d2){
               if (d2.status===1 && d2.product) {
-                var p  = d2.product;
-                var n  = p.product_name_zh||p.product_name_en||p.product_name||"";
-                var b  = p.brands||"";
+                var p = d2.product;
+                var n = p.product_name_zh||p.product_name_en||p.product_name||"";
+                var b = p.brands||"";
                 nameField.value = (b?b+" ":"")+n||"未找到，请手动输入";
               } else {
                 nameField.value = "未找到，请手动输入";
@@ -166,13 +163,12 @@
     var remark   = document.getElementById("remark").value;
 
     if (!barcode && !name) {
-      msg.className="err";
-      msg.textContent="请先扫描条码或填写货物名称";
-      msg.style.display="block";
+      msg.className = "err";
+      msg.textContent = "请先扫描条码或填写货物名称";
+      msg.style.display = "block";
       return;
     }
 
-    // 立即显示提交中状态，不等待网络返回
     btn.classList.add("btn-loading");
     btn.textContent = "提交中...";
     msg.style.display = "none";
@@ -187,23 +183,23 @@
 
     fetch(url, { mode: "no-cors" })
       .then(function() {
-        currentMode === "in" ? beepIn() : beepOut();  // 入库/出库成功也发出滴声
-        var label = currentMode==="in" ? "入库" : "出库";
-        msg.className="ok";
+        if (currentMode === "in") { beepIn(); } else { beepOut(); }
+        var label = currentMode === "in" ? "入库" : "出库";
+        msg.className = "ok";
         msg.textContent = label + "成功！";
-        msg.style.display="block";
+        msg.style.display = "block";
         document.getElementById("barcode").value = "";
         document.getElementById("name").value    = "";
         document.getElementById("qty").value     = "1";
         document.getElementById("remark").value  = "";
       })
       .catch(function(){
-        msg.className="err";
-        msg.textContent="网络错误，请检查手机是否联网";
-        msg.style.display="block";
+        msg.className = "err";
+        msg.textContent = "网络错误，请检查手机是否联网";
+        msg.style.display = "block";
       })
       .finally(function(){
-        var isIn = currentMode==="in";
+        var isIn = currentMode === "in";
         btn.classList.remove("btn-loading");
         btn.textContent = isIn ? "确认入库" : "确认出库";
         scanner.resume();
