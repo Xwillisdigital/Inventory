@@ -3,62 +3,77 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>库存扫描入库</title>
+  <title>库存管理系统</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, sans-serif; background: #f0f0f0; }
-    header { background: #1D9E75; color: white; padding: 16px; text-align: center; font-size: 18px; font-weight: 500; }
-    .container { max-width: 480px; margin: 0 auto; padding: 16px; }
-    .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
-    .card-title { font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 500; }
-    #scan-result { font-size: 13px; color: #888; text-align: center; margin-top: 8px; min-height: 18px; }
-    label { font-size: 13px; color: #666; display: block; margin-bottom: 4px; margin-top: 10px; }
-    input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
-    input:focus { outline: none; border-color: #1D9E75; }
-    .submit-btn { width: 100%; padding: 14px; background: #1D9E75; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 500; cursor: pointer; margin-top: 16px; }
-    .submit-btn:active { background: #0F6E56; }
-    #msg { text-align: center; padding: 10px; font-size: 14px; border-radius: 8px; margin-top: 10px; display: none; }
-    .ok  { background: #E1F5EE; color: #0F6E56; }
-    .err { background: #FCEBEB; color: #A32D2D; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,sans-serif;background:#f0f0f0}
+    header{background:#1D9E75;color:white;padding:16px;text-align:center;font-size:18px;font-weight:500}
+    .container{max-width:480px;margin:0 auto;padding:16px}
+    .toggle-row{display:flex;gap:8px;margin-bottom:14px}
+    .toggle-btn{flex:1;padding:11px;border-radius:10px;border:0.5px solid #ddd;background:white;font-size:15px;font-weight:500;cursor:pointer;color:#666}
+    .toggle-btn.active-in{background:#1D9E75;color:white;border-color:#1D9E75}
+    .toggle-btn.active-out{background:#D85A30;color:white;border-color:#D85A30}
+    .card{background:white;border-radius:12px;padding:16px;margin-bottom:14px}
+    .card-title{font-size:14px;color:#666;margin-bottom:10px;font-weight:500}
+    #scan-result{font-size:13px;color:#888;text-align:center;margin-top:8px;min-height:18px}
+    label{font-size:13px;color:#666;display:block;margin-bottom:4px;margin-top:10px}
+    input{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:15px}
+    input:focus{outline:none;border-color:#1D9E75}
+    .stock-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:13px;margin-top:6px}
+    .stock-ok{background:#E1F5EE;color:#0F6E56}
+    .stock-low{background:#FAEEDA;color:#854F0B}
+    .stock-empty{background:#FCEBEB;color:#A32D2D}
+    .submit-btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:500;cursor:pointer;margin-top:16px;color:white}
+    .btn-in{background:#1D9E75}
+    .btn-in:active{background:#0F6E56}
+    .btn-out{background:#D85A30}
+    .btn-out:active{background:#993C1D}
+    #msg{text-align:center;padding:10px;font-size:14px;border-radius:8px;margin-top:10px;display:none;line-height:1.5}
+    .ok{background:#E1F5EE;color:#0F6E56}
+    .err{background:#FCEBEB;color:#A32D2D}
   </style>
 </head>
 <body>
-
-<header>库存扫描入库系统</header>
-
+<header>库存管理系统</header>
 <div class="container">
 
+  <div class="toggle-row">
+    <button class="toggle-btn active-in" id="btn-in" onclick="setMode('in')">入库</button>
+    <button class="toggle-btn" id="btn-out" onclick="setMode('out')">出库</button>
+  </div>
+
   <div class="card">
-    <div class="card-title">扫描条码</div>
+    <div class="card-title" id="scan-title">扫描条码（入库）</div>
     <div id="reader" style="width:100%"></div>
     <p id="scan-result">等待扫描...</p>
   </div>
 
   <div class="card">
-    <div class="card-title">入库信息</div>
+    <div class="card-title" id="form-title">入库信息</div>
     <label>条码 / 编号</label>
     <input id="barcode" placeholder="扫描后自动填入，或手动输入">
     <label>货物名称</label>
     <input id="name" placeholder="扫描后自动查询，或手动输入">
-    <label>入库数量</label>
+    <div id="stock-display" style="display:none;margin-top:6px"></div>
+    <label id="qty-label">入库数量</label>
     <input id="qty" type="number" value="1" min="1">
     <label>操作人姓名</label>
     <input id="operator" placeholder="请输入你的姓名">
     <label>备注</label>
     <input id="remark" placeholder="可选">
-    <button class="submit-btn" onclick="submitData()">确认入库</button>
+    <button class="submit-btn btn-in" id="submit-btn" onclick="submitData()">确认入库</button>
     <div id="msg"></div>
   </div>
 
 </div>
 
 <script>
-  var API_URL = "https://script.google.com/macros/s/AKfycbyMJlegxjaMeC-KDvcXBx7QssGMaS4QAdjeyk4d0BMjrsn4FMK7nnUX-yiSLDd823JE/exec";
+  var API_URL = "•	https://script.google.com/macros/s/AKfycbyMJlegxjaMeC-KDvcXBx7QssGMaS4QAdjeyk4d0BMjrsn4FMK7nnUX-yiSLDd823JE/exec";
+  var currentMode = "in";
 
   var scanner = new Html5QrcodeScanner(
-    "reader",
-    { fps: 10, qrbox: { width: 250, height: 180 } }
+    "reader", { fps: 10, qrbox: { width: 250, height: 180 } }
   );
 
   scanner.render(function(text) {
@@ -66,101 +81,107 @@
     document.getElementById("scan-result").textContent = "已扫描：" + text;
     scanner.pause();
     lookupProduct(text);
+    if (currentMode === "out") showStock(text);
   });
 
-    function lookupProduct(barcode) {
+  function setMode(mode) {
+    currentMode = mode;
+    var isIn = mode === "in";
+    document.getElementById("btn-in").className  = "toggle-btn" + (isIn ? " active-in" : "");
+    document.getElementById("btn-out").className = "toggle-btn" + (!isIn ? " active-out" : "");
+    document.getElementById("scan-title").textContent  = isIn ? "扫描条码（入库）" : "扫描条码（出库）";
+    document.getElementById("form-title").textContent  = isIn ? "入库信息" : "出库信息";
+    document.getElementById("qty-label").textContent   = isIn ? "入库数量" : "出库数量";
+    document.getElementById("submit-btn").textContent  = isIn ? "确认入库" : "确认出库";
+    document.getElementById("submit-btn").className    = "submit-btn " + (isIn ? "btn-in" : "btn-out");
+    document.getElementById("stock-display").style.display = "none";
+    document.getElementById("barcode").value = "";
+    document.getElementById("name").value = "";
+    document.getElementById("qty").value = "1";
+    document.getElementById("msg").style.display = "none";
+    scanner.resume();
+  }
+
+  function showStock(barcode) {
+    var display = document.getElementById("stock-display");
+    display.innerHTML = "<span class='stock-badge'>查询库存中...</span>";
+    display.style.display = "block";
+    fetch(API_URL + "?action=getstock&barcode=" + encodeURIComponent(barcode),
+          { mode: "no-cors" })
+      .catch(function(){});
+    var overview = "请在 Google Sheets 库存总览中查看当前余量";
+    display.innerHTML = "<span class='stock-badge stock-ok'>" + overview + "</span>";
+  }
+
+  function lookupProduct(barcode) {
     var nameField = document.getElementById("name");
     nameField.value = "查询中...";
-
-    var localDB = {
-      // 填入你自己的货物，例如：
-      // "9787111111111": "某本书",
-      // "12345678": "螺丝M3x10"
-    };
-    if (localDB[barcode]) {
-      nameField.value = localDB[barcode];
-      return;
-    }
-
-    // 先查图书数据库（Open Library）
-    fetch("https://openlibrary.org/api/books?bibkeys=ISBN:"
-          + barcode + "&format=json&jscmd=data")
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
+    var localDB = {};
+    if (localDB[barcode]) { nameField.value = localDB[barcode]; return; }
+    fetch("https://openlibrary.org/api/books?bibkeys=ISBN:" + barcode + "&format=json&jscmd=data")
+      .then(function(r){ return r.json(); })
+      .then(function(d){
         var key = "ISBN:" + barcode;
         if (d[key] && d[key].title) {
-          var authors = "";
-          if (d[key].authors && d[key].authors.length) {
-            authors = " / " + d[key].authors[0].name;
-          }
+          var authors = d[key].authors ? " / " + d[key].authors[0].name : "";
           nameField.value = d[key].title + authors;
         } else {
-          // 图书查不到，再查食品数据库
-          return fetch("https://world.openfoodfacts.org/api/v0/product/"
-                       + barcode + ".json")
-            .then(function(r) { return r.json(); })
-            .then(function(d2) {
-              if (d2.status === 1 && d2.product) {
+          return fetch("https://world.openfoodfacts.org/api/v0/product/" + barcode + ".json")
+            .then(function(r){ return r.json(); })
+            .then(function(d2){
+              if (d2.status===1 && d2.product) {
                 var p = d2.product;
-                var n = p.product_name_zh || p.product_name_en
-                        || p.product_name || "";
-                var b = p.brands || "";
-                nameField.value = (b ? b + " " : "") + n
-                                  || "未找到，请手动输入";
-              } else {
-                nameField.value = "未找到，请手动输入";
-              }
+                var n = p.product_name_zh||p.product_name_en||p.product_name||"";
+                var b = p.brands||"";
+                nameField.value = (b?b+" ":"")+n||"未找到，请手动输入";
+              } else { nameField.value = "未找到，请手动输入"; }
             });
         }
       })
-      .catch(function() {
-        nameField.value = "查询失败，请手动输入";
-      });
+      .catch(function(){ nameField.value = "查询失败，请手动输入"; });
   }
 
-    function submitData() {
-    var msg = document.getElementById("msg");
-    msg.style.display = "none";
-
+  function submitData() {
+    var msg      = document.getElementById("msg");
     var barcode  = document.getElementById("barcode").value;
     var name     = document.getElementById("name").value;
     var quantity = document.getElementById("qty").value;
+    var operator = document.getElementById("operator").value;
     var remark   = document.getElementById("remark").value;
+    msg.style.display = "none";
 
     if (!barcode && !name) {
-      msg.className = "err";
-      msg.textContent = "请先扫描条码或填写货物名称";
-      msg.style.display = "block";
-      return;
+      msg.className="err"; msg.textContent="请先扫描条码或填写货物名称";
+      msg.style.display="block"; return;
     }
 
-    // 改用 GET 请求，彻底避免 CORS 跳转问题
-var operator = document.getElementById("operator").value;
-var url = API_URL
-  + "?barcode="   + encodeURIComponent(barcode)
-  + "&name="      + encodeURIComponent(name)
-  + "&quantity="  + encodeURIComponent(quantity)
-  + "&remark="    + encodeURIComponent(remark)
-  + "&operator="  + encodeURIComponent(operator);
+    var url = API_URL
+      + "?action="    + currentMode
+      + "&barcode="   + encodeURIComponent(barcode)
+      + "&name="      + encodeURIComponent(name)
+      + "&quantity="  + encodeURIComponent(quantity)
+      + "&operator="  + encodeURIComponent(operator)
+      + "&remark="    + encodeURIComponent(remark);
 
     fetch(url, { mode: "no-cors" })
       .then(function() {
-        msg.className = "ok";
-        msg.textContent = "入库成功！数据已写入 Google Sheets";
-        msg.style.display = "block";
-        document.getElementById("barcode").value = "";
-        document.getElementById("name").value = "";
-        document.getElementById("qty").value = "1";
-        document.getElementById("remark").value = "";
+        var label = currentMode === "in" ? "入库" : "出库";
+        msg.className="ok";
+        msg.textContent = label + "成功！数据已写入 Google Sheets";
+        msg.style.display="block";
+        document.getElementById("barcode").value="";
+        document.getElementById("name").value="";
+        document.getElementById("qty").value="1";
+        document.getElementById("remark").value="";
+        document.getElementById("stock-display").style.display="none";
         scanner.resume();
       })
-      .catch(function() {
-        msg.className = "err";
-        msg.textContent = "网络错误，请检查手机是否联网";
-        msg.style.display = "block";
+      .catch(function(){
+        msg.className="err";
+        msg.textContent="网络错误，请检查手机是否联网";
+        msg.style.display="block";
       });
   }
 </script>
-
 </body>
 </html>
