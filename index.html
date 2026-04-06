@@ -20,15 +20,11 @@
     label{font-size:13px;color:#666;display:block;margin-bottom:4px;margin-top:10px}
     input{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:15px}
     input:focus{outline:none;border-color:#1D9E75}
-    .stock-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:13px;margin-top:6px}
-    .stock-ok{background:#E1F5EE;color:#0F6E56}
-    .stock-low{background:#FAEEDA;color:#854F0B}
-    .stock-empty{background:#FCEBEB;color:#A32D2D}
-    .submit-btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:500;cursor:pointer;margin-top:16px;color:white}
+    .submit-btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:500;cursor:pointer;margin-top:16px;color:white;transition:opacity .15s}
+    .submit-btn:active{opacity:.8}
     .btn-in{background:#1D9E75}
-    .btn-in:active{background:#0F6E56}
     .btn-out{background:#D85A30}
-    .btn-out:active{background:#993C1D}
+    .btn-loading{opacity:.6;pointer-events:none}
     #msg{text-align:center;padding:10px;font-size:14px;border-radius:8px;margin-top:10px;display:none;line-height:1.5}
     .ok{background:#E1F5EE;color:#0F6E56}
     .err{background:#FCEBEB;color:#A32D2D}
@@ -39,8 +35,8 @@
 <div class="container">
 
   <div class="toggle-row">
-    <button class="toggle-btn active-in" id="btn-in" onclick="setMode('in')">入库</button>
-    <button class="toggle-btn" id="btn-out" onclick="setMode('out')">出库</button>
+    <button class="toggle-btn active-in" id="btn-in"  onclick="setMode('in')">入库</button>
+    <button class="toggle-btn"           id="btn-out" onclick="setMode('out')">出库</button>
   </div>
 
   <div class="card">
@@ -55,7 +51,6 @@
     <input id="barcode" placeholder="扫描后自动填入，或手动输入">
     <label>货物名称</label>
     <input id="name" placeholder="扫描后自动查询，或手动输入">
-    <div id="stock-display" style="display:none;margin-top:6px"></div>
     <label id="qty-label">入库数量</label>
     <input id="qty" type="number" value="1" min="1">
     <label>操作人姓名</label>
@@ -67,21 +62,38 @@
   </div>
 
 </div>
-
 <script>
   var API_URL = "https://script.google.com/macros/s/AKfycbyMJlegxjaMeC-KDvcXBx7QssGMaS4QAdjeyk4d0BMjrsn4FMK7nnUX-yiSLDd823JE/exec";
   var currentMode = "in";
+  var audioCtx = null;
+
+  // 滴声函数
+  function beep() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc  = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = "sine";
+      osc.frequency.value = 1200;
+      gain.gain.setValueAtTime(0.6, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + 0.15);
+    } catch(e) {}
+  }
 
   var scanner = new Html5QrcodeScanner(
     "reader", { fps: 10, qrbox: { width: 250, height: 180 } }
   );
 
   scanner.render(function(text) {
+    beep();  // 扫描成功立即发出滴声
     document.getElementById("barcode").value = text;
     document.getElementById("scan-result").textContent = "已扫描：" + text;
     scanner.pause();
-    lookupProduct(text);
-    if (currentMode === "out") showStock(text);
+    lookupProduct(text);  // 查询名称在后台进行，不阻塞提交
   });
 
   function setMode(mode) {
@@ -89,34 +101,25 @@
     var isIn = mode === "in";
     document.getElementById("btn-in").className  = "toggle-btn" + (isIn ? " active-in" : "");
     document.getElementById("btn-out").className = "toggle-btn" + (!isIn ? " active-out" : "");
-    document.getElementById("scan-title").textContent  = isIn ? "扫描条码（入库）" : "扫描条码（出库）";
-    document.getElementById("form-title").textContent  = isIn ? "入库信息" : "出库信息";
-    document.getElementById("qty-label").textContent   = isIn ? "入库数量" : "出库数量";
-    document.getElementById("submit-btn").textContent  = isIn ? "确认入库" : "确认出库";
-    document.getElementById("submit-btn").className    = "submit-btn " + (isIn ? "btn-in" : "btn-out");
-    document.getElementById("stock-display").style.display = "none";
+    document.getElementById("scan-title").textContent = isIn ? "扫描条码（入库）" : "扫描条码（出库）";
+    document.getElementById("form-title").textContent = isIn ? "入库信息" : "出库信息";
+    document.getElementById("qty-label").textContent  = isIn ? "入库数量" : "出库数量";
+    var btn = document.getElementById("submit-btn");
+    btn.textContent = isIn ? "确认入库" : "确认出库";
+    btn.className   = "submit-btn " + (isIn ? "btn-in" : "btn-out");
     document.getElementById("barcode").value = "";
-    document.getElementById("name").value = "";
-    document.getElementById("qty").value = "1";
+    document.getElementById("name").value    = "";
+    document.getElementById("qty").value     = "1";
     document.getElementById("msg").style.display = "none";
     scanner.resume();
-  }
-
-  function showStock(barcode) {
-    var display = document.getElementById("stock-display");
-    display.innerHTML = "<span class='stock-badge'>查询库存中...</span>";
-    display.style.display = "block";
-    fetch(API_URL + "?action=getstock&barcode=" + encodeURIComponent(barcode),
-          { mode: "no-cors" })
-      .catch(function(){});
-    var overview = "请在 Google Sheets 库存总览中查看当前余量";
-    display.innerHTML = "<span class='stock-badge stock-ok'>" + overview + "</span>";
   }
 
   function lookupProduct(barcode) {
     var nameField = document.getElementById("name");
     nameField.value = "查询中...";
-    var localDB = {};
+    var localDB = {
+      // "条码": "货物名称"
+    };
     if (localDB[barcode]) { nameField.value = localDB[barcode]; return; }
     fetch("https://openlibrary.org/api/books?bibkeys=ISBN:" + barcode + "&format=json&jscmd=data")
       .then(function(r){ return r.json(); })
@@ -130,11 +133,13 @@
             .then(function(r){ return r.json(); })
             .then(function(d2){
               if (d2.status===1 && d2.product) {
-                var p = d2.product;
-                var n = p.product_name_zh||p.product_name_en||p.product_name||"";
-                var b = p.brands||"";
+                var p  = d2.product;
+                var n  = p.product_name_zh||p.product_name_en||p.product_name||"";
+                var b  = p.brands||"";
                 nameField.value = (b?b+" ":"")+n||"未找到，请手动输入";
-              } else { nameField.value = "未找到，请手动输入"; }
+              } else {
+                nameField.value = "未找到，请手动输入";
+              }
             });
         }
       })
@@ -143,43 +148,55 @@
 
   function submitData() {
     var msg      = document.getElementById("msg");
+    var btn      = document.getElementById("submit-btn");
     var barcode  = document.getElementById("barcode").value;
     var name     = document.getElementById("name").value;
     var quantity = document.getElementById("qty").value;
     var operator = document.getElementById("operator").value;
     var remark   = document.getElementById("remark").value;
-    msg.style.display = "none";
 
     if (!barcode && !name) {
-      msg.className="err"; msg.textContent="请先扫描条码或填写货物名称";
-      msg.style.display="block"; return;
+      msg.className="err";
+      msg.textContent="请先扫描条码或填写货物名称";
+      msg.style.display="block";
+      return;
     }
 
+    // 立即显示提交中状态，不等待网络返回
+    btn.classList.add("btn-loading");
+    btn.textContent = "提交中...";
+    msg.style.display = "none";
+
     var url = API_URL
-      + "?action="    + currentMode
-      + "&barcode="   + encodeURIComponent(barcode)
-      + "&name="      + encodeURIComponent(name)
-      + "&quantity="  + encodeURIComponent(quantity)
-      + "&operator="  + encodeURIComponent(operator)
-      + "&remark="    + encodeURIComponent(remark);
+      + "?action="   + currentMode
+      + "&barcode="  + encodeURIComponent(barcode)
+      + "&name="     + encodeURIComponent(name === "查询中..." ? barcode : name)
+      + "&quantity=" + encodeURIComponent(quantity)
+      + "&operator=" + encodeURIComponent(operator)
+      + "&remark="   + encodeURIComponent(remark);
 
     fetch(url, { mode: "no-cors" })
       .then(function() {
-        var label = currentMode === "in" ? "入库" : "出库";
+        beep();  // 入库/出库成功也发出滴声
+        var label = currentMode==="in" ? "入库" : "出库";
         msg.className="ok";
-        msg.textContent = label + "成功！数据已写入 Google Sheets";
+        msg.textContent = label + "成功！";
         msg.style.display="block";
-        document.getElementById("barcode").value="";
-        document.getElementById("name").value="";
-        document.getElementById("qty").value="1";
-        document.getElementById("remark").value="";
-        document.getElementById("stock-display").style.display="none";
-        scanner.resume();
+        document.getElementById("barcode").value = "";
+        document.getElementById("name").value    = "";
+        document.getElementById("qty").value     = "1";
+        document.getElementById("remark").value  = "";
       })
       .catch(function(){
         msg.className="err";
         msg.textContent="网络错误，请检查手机是否联网";
         msg.style.display="block";
+      })
+      .finally(function(){
+        var isIn = currentMode==="in";
+        btn.classList.remove("btn-loading");
+        btn.textContent = isIn ? "确认入库" : "确认出库";
+        scanner.resume();
       });
   }
 </script>
